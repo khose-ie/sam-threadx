@@ -1,46 +1,46 @@
 
 #include <fx_api.h>
-#include <sam-filex.h>
-#include <sam-media.h>
+#include <smac-filex.h>
+#include <smac-media.h>
 #include <tx_byte_pool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
+#ifndef SMAC_FX_MEDIA_COUNT
+#define SMAC_FX_MEDIA_COUNT (1)
+#endif // SMAC_FX_MEDIA_COUNT
+
+#ifndef SMAC_FX_MEDIA_WORK_SIZE
+#define SMAC_FX_MEDIA_WORK_SIZE (4096)
+#endif // SMAC_FX_MEDIA_WORK_SIZE
+
+#ifndef SMAC_FX_MAX_OPEN_ENTITIES
+#define SMAC_FX_MAX_OPEN_ENTITIES (8)
+#endif // SMAC_FX_MAX_OPEN_ENTITIES
+
 /* Forward declaration for FileX internal partition helper (not exposed in fx_api.h).
     Declared here to avoid implicit function declaration errors when calling it. */
 UINT _fx_partition_offset_calculate(void* partition_sector, UINT partition, ULONG* partition_start,
                                     ULONG* partition_size);
 
-#ifndef SAM_FX_MEDIA_COUNT
-#define MEDIA_COUNT (1)
-#else // SAM_FX_MEDIA_COUNT
-#define MEDIA_COUNT (SAM_FX_MEDIA_COUNT)
-#endif // SAM_FX_MEDIA_COUNT
+#define MEDIA_COUNT (SMAC_FX_MEDIA_COUNT)
 
-#ifndef SAM_FX_MEDIA_WORK_SIZE
-#define MEDIA_WORK_SIZE (4096)
-#else // SAM_FX_MEDIA_WORK_SIZE
-#define MEDIA_WORK_SIZE align32down(SAM_FX_MEDIA_WORK_SIZE)
-#endif // SAM_FX_MEDIA_WORK_SIZE
+#define MEDIA_WORK_SIZE align32down(SMAC_FX_MEDIA_WORK_SIZE)
 
-#ifndef SAM_FX_MAX_OPEN_ENTITIES
-#define MAX_OPEN_ENTITIES (8)
-#else // SAM_FX_MAX_OPEN_ENTITIES
-#define MAX_OPEN_ENTITIES (SAM_FX_MAX_OPEN_ENTITIES)
-#endif // SAM_FX_MAX_OPEN_ENTITIES
+#define MAX_OPEN_ENTITIES (SMAC_FX_MAX_OPEN_ENTITIES)
 
 /// @brief FS stack memory configuration
 /// @details This section defines the memory configuration for the FS stack, including whether
 ///          external memory is used and the corresponding memory pool variable.
-#ifndef SAM_FX_STACK_EX_MEM
+#ifndef SMAC_FX_STACK_EX_MEM
 #define EXT1            static
-#define FILEX_STACK_MEM _stack_mem
-#else // SAM_FX_STACK_EX_MEM
+#define FILEX_STACK_MEM stack_mem
+#else // SMAC_FX_STACK_EX_MEM
 #define EXT1            extern
-#define FILEX_STACK_MEM (SAM_FX_STACK_EX_MEM)
-#endif // SAM_FX_STACK_EX_MEM
+#define FILEX_STACK_MEM (SMAC_FX_STACK_EX_MEM)
+#endif // SMAC_FX_STACK_EX_MEM
 
 /// @brief Size of memory header for ThreadX block pool allocations
 /// @details This constant defines the size of the memory header
@@ -67,11 +67,11 @@ UINT _fx_partition_offset_calculate(void* partition_sector, UINT partition, ULON
 /// @brief FS stack memory size configuration
 /// @details This section defines the size of the FS stack memory, taking into account whether
 ///          external memory is used and the corresponding memory size macro.
-#ifndef SAM_FX_STACK_EX_MEM_SIZE
+#ifndef SMAC_FX_STACK_EX_MEM_SIZE
 #define FILEX_STACK_MEM_SIZE (FILEX_STACK_MEM_REQUIRED_SIZE)
-#else // SAM_FX_STACK_EX_MEM_SIZE
-#define FILEX_STACK_MEM_SIZE align32down(SAM_FX_STACK_EX_MEM_SIZE)
-#endif // SAM_FX_STACK_EX_MEM_SIZE
+#else // SMAC_FX_STACK_EX_MEM_SIZE
+#define FILEX_STACK_MEM_SIZE align32down(SMAC_FX_STACK_EX_MEM_SIZE)
+#endif // SMAC_FX_STACK_EX_MEM_SIZE
 
 /// @brief Media information structure
 /// @details This structure holds the FX_MEDIA and associated mutex for thread-safe operations.
@@ -79,7 +79,7 @@ typedef struct
 {
     FX_MEDIA media;
     TX_MUTEX mutex;
-    mediaDiskIO_t diskio;
+    smacMediaDiskIO_t diskio;
     uint8_t workspace[MEDIA_WORK_SIZE];
 } filexMediaStack_t;
 
@@ -173,37 +173,37 @@ static void mem_block_free(uint8_t* mem)
 /// @brief Lock a mutex
 /// @details This function locks the specified mutex.
 /// @param mutex Pointer to the mutex to lock
-/// @return RET_VALUE_OK on success, error code otherwise
-static RetValue_t mutex_lock(TX_MUTEX* mutex)
+/// @return SMAC_RET_OK on success, error code otherwise
+static smacRetCode_t mutex_lock(TX_MUTEX* mutex)
 {
 #ifndef SINGLE_THREAD
 
     if (tx_mutex_get(mutex, 500) != TX_SUCCESS)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
 #endif // SINGLE_THREAD
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Unlock a mutex
 /// @details This function unlocks the specified mutex.
 /// @param mutex Pointer to the mutex to unlock
-/// @return RET_VALUE_OK on success, error code otherwise
-static RetValue_t mutex_unlock(TX_MUTEX* mutex)
+/// @return SMAC_RET_OK on success, error code otherwise
+static smacRetCode_t mutex_unlock(TX_MUTEX* mutex)
 {
 #ifndef SINGLE_THREAD
 
     if (tx_mutex_put(mutex) != TX_SUCCESS)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
 #endif // SINGLE_THREAD
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Disk I/O driver function
@@ -215,7 +215,7 @@ static void diskio_main(FX_MEDIA* media)
     uint32_t partition_start;
     uint32_t partition_size;
 
-    mediaDiskIO_t* diskio = (mediaDiskIO_t*)media->fx_media_driver_info;
+    smacMediaDiskIO_t* diskio = (smacMediaDiskIO_t*)media->fx_media_driver_info;
 
     if (diskio == NULL)
     {
@@ -223,7 +223,7 @@ static void diskio_main(FX_MEDIA* media)
         return;
     }
 
-    if (diskio->status() != RET_VALUE_OK)
+    if (diskio->status() != SMAC_RET_OK)
     {
         media->fx_media_driver_status = FX_IO_ERROR;
         return;
@@ -233,179 +233,181 @@ static void diskio_main(FX_MEDIA* media)
 
     switch (media->fx_media_driver_request)
     {
-    case FX_DRIVER_READ:
-    {
-        if (diskio->read(media->fx_media_hidden_sectors + media->fx_media_driver_logical_sector,
-                         media->fx_media_driver_sectors,
-                         media->fx_media_driver_buffer) != RET_VALUE_OK)
+        case FX_DRIVER_READ:
         {
-            media->fx_media_driver_status = FX_IO_ERROR;
-        }
+            if (diskio->read(media->fx_media_hidden_sectors + media->fx_media_driver_logical_sector,
+                             media->fx_media_driver_sectors,
+                             media->fx_media_driver_buffer) != SMAC_RET_OK)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+            }
 
-        break;
-    }
-
-    case FX_DRIVER_WRITE:
-    {
-        if (diskio->write(media->fx_media_hidden_sectors + media->fx_media_driver_logical_sector,
-                          media->fx_media_driver_sectors,
-                          media->fx_media_driver_buffer) != RET_VALUE_OK)
-        {
-            media->fx_media_driver_status = FX_IO_ERROR;
-        }
-
-        break;
-    }
-
-    case FX_DRIVER_FLUSH:
-    {
-        if (diskio->flush() != RET_VALUE_OK)
-        {
-            media->fx_media_driver_status = FX_IO_ERROR;
-        }
-
-        break;
-    }
-
-    case FX_DRIVER_ABORT:
-    {
-        break;
-    }
-
-    case FX_DRIVER_INIT:
-    {
-        break;
-    }
-
-    case FX_DRIVER_BOOT_READ:
-    {
-        if (diskio->read(0, media->fx_media_driver_sectors, media->fx_media_driver_buffer) !=
-            RET_VALUE_OK)
-        {
-            media->fx_media_driver_status = FX_IO_ERROR;
             break;
         }
 
-        partition_start = 0;
-
-        status = _fx_partition_offset_calculate(media->fx_media_driver_buffer, 0, &partition_start,
-                                                &partition_size);
-
-        if (status)
+        case FX_DRIVER_WRITE:
         {
-            media->fx_media_driver_status = FX_IO_ERROR;
+            if (diskio->write(
+                    media->fx_media_hidden_sectors + media->fx_media_driver_logical_sector,
+                    media->fx_media_driver_sectors, media->fx_media_driver_buffer) != SMAC_RET_OK)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+            }
+
             break;
         }
 
-        if (partition_start == 0)
+        case FX_DRIVER_FLUSH:
         {
-            media->fx_media_driver_status = FX_IO_ERROR;
+            if (diskio->flush() != SMAC_RET_OK)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+            }
+
             break;
         }
 
-        if (diskio->read(partition_start, media->fx_media_driver_sectors,
-                         media->fx_media_driver_buffer) != RET_VALUE_OK)
+        case FX_DRIVER_ABORT:
         {
-            media->fx_media_driver_status = FX_IO_ERROR;
             break;
         }
 
-        break;
-    }
-
-    case FX_DRIVER_RELEASE_SECTORS:
-    {
-        break;
-    }
-
-    case FX_DRIVER_BOOT_WRITE:
-    {
-        if (diskio->write(0, media->fx_media_driver_sectors, media->fx_media_driver_buffer) !=
-            RET_VALUE_OK)
+        case FX_DRIVER_INIT:
         {
-            media->fx_media_driver_status = FX_IO_ERROR;
+            break;
         }
 
-        break;
-    }
+        case FX_DRIVER_BOOT_READ:
+        {
+            if (diskio->read(0, media->fx_media_driver_sectors, media->fx_media_driver_buffer) !=
+                SMAC_RET_OK)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+                break;
+            }
 
-    case FX_DRIVER_UNINIT:
-    {
-        break;
-    }
+            partition_start = 0;
 
-    default:
-        media->fx_media_driver_status = FX_IO_ERROR;
-        break;
+            status = _fx_partition_offset_calculate(media->fx_media_driver_buffer, 0,
+                                                    &partition_start, &partition_size);
+
+            if (status)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+                break;
+            }
+
+            if (partition_start == 0)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+                break;
+            }
+
+            if (diskio->read(partition_start, media->fx_media_driver_sectors,
+                             media->fx_media_driver_buffer) != SMAC_RET_OK)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+                break;
+            }
+
+            break;
+        }
+
+        case FX_DRIVER_RELEASE_SECTORS:
+        {
+            break;
+        }
+
+        case FX_DRIVER_BOOT_WRITE:
+        {
+            if (diskio->write(0, media->fx_media_driver_sectors, media->fx_media_driver_buffer) !=
+                SMAC_RET_OK)
+            {
+                media->fx_media_driver_status = FX_IO_ERROR;
+            }
+
+            break;
+        }
+
+        case FX_DRIVER_UNINIT:
+        {
+            break;
+        }
+
+        default:
+            media->fx_media_driver_status = FX_IO_ERROR;
+            break;
     }
 }
 
-static RetValue_t check_fs_feasibility(const mediaState_t* state, const mediaDiskIO_t* diskio)
+static smacRetCode_t check_fs_feasibility(const smacMediaState_t* state,
+                                          const smacMediaDiskIO_t* diskio)
 {
-    RetValue_t value       = RET_VALUE_PARAM_ERR;
+    smacRetCode_t value    = SMAC_RET_PARAM_ERR;
     uint32_t cluster_count = (diskio->sector_count() - 1) / state->sectors_per_cluster;
 
     if ((state->sectors_per_cluster == 0) || (state->num_of_fats > 2))
     {
-        return RET_VALUE_PARAM_ERR;
+        return SMAC_RET_PARAM_ERR;
     }
 
     switch (state->kind)
     {
-    case MEDIA_FORMAT_AUTO:
-    {
-        value = RET_VALUE_PARAM_ERR;
-        break;
-    }
-
-    case MEDIA_FORMAT_FAT12:
-    {
-        if (cluster_count > 4084)
+        case MEDIA_FORMAT_AUTO:
         {
+            value = SMAC_RET_PARAM_ERR;
             break;
         }
 
-        value = RET_VALUE_OK;
-        break;
-    }
-
-    case MEDIA_FORMAT_FAT16:
-    {
-        if ((cluster_count < 4085) || (cluster_count > 65524))
+        case MEDIA_FORMAT_FAT12:
         {
+            if (cluster_count > 4084)
+            {
+                break;
+            }
+
+            value = SMAC_RET_OK;
             break;
         }
 
-        if (state->directory_entries == 0)
+        case MEDIA_FORMAT_FAT16:
         {
+            if ((cluster_count < 4085) || (cluster_count > 65524))
+            {
+                break;
+            }
+
+            if (state->directory_entries == 0)
+            {
+                break;
+            }
+
+            value = SMAC_RET_OK;
             break;
         }
 
-        value = RET_VALUE_OK;
-        break;
-    }
-
-    case MEDIA_FORMAT_FAT32:
-    {
-        if (cluster_count < 65525)
+        case MEDIA_FORMAT_FAT32:
         {
+            if (cluster_count < 65525)
+            {
+                break;
+            }
+
+            value = SMAC_RET_OK;
             break;
         }
 
-        value = RET_VALUE_OK;
-        break;
-    }
-
-    case MEDIA_FORMAT_EXFAT:
-    {
-        if ((diskio->sector_size() < 512) || (diskio->sector_size() & (diskio->sector_size() - 1)))
+        case MEDIA_FORMAT_EXFAT:
         {
+            if ((diskio->sector_size() < 512) ||
+                (diskio->sector_size() & (diskio->sector_size() - 1)))
+            {
+                break;
+            }
+
+            value = SMAC_RET_OK;
             break;
         }
-
-        value = RET_VALUE_OK;
-        break;
-    }
     }
 
     return value;
@@ -415,12 +417,12 @@ static RetValue_t check_fs_feasibility(const mediaState_t* state, const mediaDis
 /// @details This function initializes the global file system subsystem.
 ///     It must be called once before any sces_fs_mount() operation. For some file systems (e.g.
 ///     FileX), this function performs underlying system-level initialization.
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_initialize(void)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_initialize(void)
 {
     if (FILEX_STACK_MEM_SIZE < FILEX_STACK_MEM_REQUIRED_SIZE)
     {
-        return RET_VALUE_STACK_OVERFLOW;
+        return SMAC_RET_STACK_OVERFLOW;
     }
 
     memset(_filex, 0, sizeof(*_filex));
@@ -429,41 +431,41 @@ RetValue_t media_initialize(void)
                              align32up(sizeof(filexEntity_t)), _filex->entities.stack_mem,
                              sizeof(_filex->entities.stack_mem)) != TX_SUCCESS)
     {
-        return RET_VALUE_MEM_ALLOC_FAILURE;
+        return SMAC_RET_MEM_ALLOC_FAILURE;
     }
 
     fx_system_initialize();
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Set disk I/O driver function
 /// @details This function sets the disk I/O driver function for the specified disk number.
 /// @param disk_num Disk number for which to set the disk I/O driver function
 /// @param diskio Pointer to the disk I/O driver structure
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_set_diskio(uint32_t disk_num, const mediaDiskIO_t* diskio)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_set_diskio(uint32_t disk_num, const smacMediaDiskIO_t* diskio)
 {
     if (disk_num >= MEDIA_COUNT || diskio == NULL)
     {
-        return RET_VALUE_PARAM_ERR;
+        return SMAC_RET_PARAM_ERR;
     }
 
     if (diskio->read == NULL || diskio->write == NULL || diskio->flush == NULL ||
         diskio->trim == NULL || diskio->status == NULL || diskio->sector_count == NULL ||
         diskio->sector_size == NULL || diskio->block_size == NULL)
     {
-        return RET_VALUE_PARAM_ERR;
+        return SMAC_RET_PARAM_ERR;
     }
 
     if (_filex->media[disk_num].diskio.status != NULL)
     {
-        return RET_VALUE_INSTANCE_DUPLICATE;
+        return SMAC_RET_INSTANCE_DUPLICATE;
     }
 
     _filex->media[disk_num].diskio = *diskio;
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Format a file system
@@ -471,19 +473,19 @@ RetValue_t media_set_diskio(uint32_t disk_num, const mediaDiskIO_t* diskio)
 /// @param name   Name of the file system
 /// @param disk_num Disk number to format
 /// @param info   Information about the file system to format
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_format(const char* name, uint32_t disk_num, const mediaState_t* info)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_format(const char* name, uint32_t disk_num, const smacMediaState_t* info)
 {
     filexMediaStack_t* media = &_filex->media[disk_num];
 
     if (media->diskio.status == NULL)
     {
-        return RET_VALUE_FS_DISK_NOT_READY;
+        return SMAC_RET_FS_DISK_NOT_READY;
     }
 
-    if (check_fs_feasibility(info, &media->diskio) != RET_VALUE_OK)
+    if (check_fs_feasibility(info, &media->diskio) != SMAC_RET_OK)
     {
-        return RET_VALUE_PARAM_ERR;
+        return SMAC_RET_PARAM_ERR;
     }
 
     memset(media->workspace, 0, MEDIA_WORK_SIZE);
@@ -493,10 +495,10 @@ RetValue_t media_format(const char* name, uint32_t disk_num, const mediaState_t*
                         media->diskio.sector_count(), media->diskio.sector_size(),
                         info->sectors_per_cluster, 0, 0) != FX_SUCCESS)
     {
-        return RET_VALUE_FS_FORMAT_FAILURE;
+        return SMAC_RET_FS_FORMAT_FAILURE;
     }
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Mount a file system
@@ -504,7 +506,7 @@ RetValue_t media_format(const char* name, uint32_t disk_num, const mediaState_t*
 /// @param name          Name of the file system
 /// @param disk_num      Disk number to mount
 /// @return Handle to the mounted file system, or NULL on failure
-mediaHandle_t media_mount(const char* name, uint32_t disk_num)
+smacMediaHandle_t smac_media_mount(const char* name, uint32_t disk_num)
 {
     filexMediaStack_t* media = &_filex->media[disk_num];
 
@@ -524,13 +526,13 @@ mediaHandle_t media_mount(const char* name, uint32_t disk_num)
         return NULL;
     }
 
-    return (mediaHandle_t)media;
+    return (smacMediaHandle_t)media;
 }
 
 /// @brief Unmount a file system
 /// @details This function unmounts the specified file system.
-/// @param fs Handle to the file system to unmount
-void media_unmount(mediaHandle_t media)
+/// @param media Handle to the file system to unmount
+void smac_media_unmount(smacMediaHandle_t media)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
@@ -540,9 +542,9 @@ void media_unmount(mediaHandle_t media)
 
 /// @brief Get the name of the file system
 /// @details This function retrieves the name of the specified file system.
-/// @param fs Handle to the file system
+/// @param media Handle to the file system
 /// @return Pointer to the file system's name string
-const char* media_name(mediaHandle_t media)
+const char* smac_media_name(smacMediaHandle_t media)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
     return (const char*)xmedia->media.fx_media_name;
@@ -551,145 +553,145 @@ const char* media_name(mediaHandle_t media)
 /// @brief Synchronize the file system
 /// @details This function synchronizes the specified file system, ensuring that all pending
 ///     changes are written to the underlying storage.
-/// @param fs Handle to the file system
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_sync(mediaHandle_t media)
+/// @param media Handle to the file system
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_sync(smacMediaHandle_t media)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (fx_media_flush(&xmedia->media) != FX_SUCCESS)
     {
         mutex_unlock(&xmedia->mutex);
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     mutex_unlock(&xmedia->mutex);
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Create an empty file
 /// @details Creates an empty file at the specified path.
 ///     If the file already exists, an error is returned.
-/// @param fs Handle to the file system
+/// @param media Handle to the file system
 /// @param path Path of the file to create
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_create_file(mediaHandle_t media, const char* path)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_create_file(smacMediaHandle_t media, const char* path)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (fx_file_create(&xmedia->media, (CHAR*)path) != FX_SUCCESS)
     {
         mutex_unlock(&xmedia->mutex);
-        return RET_VALUE_INSTANCE_CREATE_FAILURE;
+        return SMAC_RET_INSTANCE_CREATE_FAILURE;
     }
 
     mutex_unlock(&xmedia->mutex);
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Remove a file
 /// @details Removes the file at the specified path.
-/// @param fs Handle to the file system
+/// @param media Handle to the file system
 /// @param path Path of the file to remove
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_remove_file(mediaHandle_t media, const char* path)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_remove_file(smacMediaHandle_t media, const char* path)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (fx_file_delete(&xmedia->media, (CHAR*)path) != FX_SUCCESS)
     {
         mutex_unlock(&xmedia->mutex);
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     mutex_unlock(&xmedia->mutex);
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Create a directory
 /// @details Creates a directory at the specified path.
 ///     If the directory already exists, an error is returned.
-/// @param fs   Handle to the file system
+/// @param media   Handle to the file system
 /// @param path Path of the directory to create
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_create_dir(mediaHandle_t media, const char* path)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_create_dir(smacMediaHandle_t media, const char* path)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (fx_directory_create(&xmedia->media, (CHAR*)path) != FX_SUCCESS)
     {
         mutex_unlock(&xmedia->mutex);
-        return RET_VALUE_INSTANCE_CREATE_FAILURE;
+        return SMAC_RET_INSTANCE_CREATE_FAILURE;
     }
 
     mutex_unlock(&xmedia->mutex);
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Remove a directory
 /// @details Removes the directory at the specified path.
 ///     The directory must be empty to be removed successfully.
-/// @param fs   Handle to the file system
+/// @param media   Handle to the file system
 /// @param path Path of the directory to remove
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_remove_dir(mediaHandle_t media, const char* path)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_remove_dir(smacMediaHandle_t media, const char* path)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (fx_directory_delete(&xmedia->media, (CHAR*)path) != FX_SUCCESS)
     {
         mutex_unlock(&xmedia->mutex);
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     mutex_unlock(&xmedia->mutex);
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief  Move or rename a file or directory
 /// @details This function moves or renames a file or directory from old_path to new_path.
-///     It do the same operation for both files and directories, and like the "rename" function
+///     It do the smace operation for both files and directories, and like the "rename" function
 ///     in standard C library. It can't move files or directories across different mounted file
 ///     systems.
-/// @param fs        Handle to the file system
+/// @param media        Handle to the file system
 /// @param old_path  Current path of the file or directory
 /// @param new_path  New path of the file or directory
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_entity_move(mediaHandle_t media, const char* old_path, const char* new_path)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_entity_move(smacMediaHandle_t media, const char* old_path, const char* new_path)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
     UINT dir_test_value       = fx_directory_name_test(&xmedia->media, (CHAR*)old_path);
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (dir_test_value == FX_SUCCESS)
@@ -697,7 +699,7 @@ RetValue_t media_entity_move(mediaHandle_t media, const char* old_path, const ch
         if (fx_directory_rename(&xmedia->media, (CHAR*)old_path, (CHAR*)new_path) != FX_SUCCESS)
         {
             mutex_unlock(&xmedia->mutex);
-            return RET_VALUE_LOW_LEVEL_FAILURE;
+            return SMAC_RET_LOW_LEVEL_FAILURE;
         }
     }
     else if (dir_test_value == FX_NOT_DIRECTORY)
@@ -705,53 +707,55 @@ RetValue_t media_entity_move(mediaHandle_t media, const char* old_path, const ch
         if (fx_file_rename(&xmedia->media, (CHAR*)old_path, (CHAR*)new_path) != FX_SUCCESS)
         {
             mutex_unlock(&xmedia->mutex);
-            return RET_VALUE_LOW_LEVEL_FAILURE;
+            return SMAC_RET_LOW_LEVEL_FAILURE;
         }
     }
     else
     {
         mutex_unlock(&xmedia->mutex);
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     mutex_unlock(&xmedia->mutex);
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Get the state of a file or directory
 /// @details This function retrieves the state information of a file or directory at the specified
 ///          path.
-/// @param fs    Handle to the file system
+/// @param media    Handle to the file system
 /// @param path  Path of the file or directory
 /// @param state Pointer to a mediaEntityState_t structure to receive the state information
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_entity_state(mediaHandle_t media, const char* path, mediaEntityState_t* state)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_entity_state(smacMediaHandle_t media, const char* path,
+                                 smacMediaEntityState_t* state)
 {
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
     if (state == NULL)
     {
-        return RET_VALUE_PARAM_ERR;
+        return SMAC_RET_PARAM_ERR;
     }
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (fx_directory_information_get(
-            &xmedia->media, (CHAR*)path, (UINT*)&state->attributes, (ULONG*)&state->size, (UINT*)&state->time_stamp.year,
-            (UINT*)&state->time_stamp.month, (UINT*)&state->time_stamp.day, (UINT*)&state->time_stamp.hour,
+            &xmedia->media, (CHAR*)path, (UINT*)&state->attributes, (ULONG*)&state->size,
+            (UINT*)&state->time_stamp.year, (UINT*)&state->time_stamp.month,
+            (UINT*)&state->time_stamp.day, (UINT*)&state->time_stamp.hour,
             (UINT*)&state->time_stamp.minute, (UINT*)&state->time_stamp.second) != FX_SUCCESS)
     {
         mutex_unlock(&xmedia->mutex);
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     state->kind = (state->attributes & FX_DIRECTORY) ? MEDIA_ENTITY_DIR : MEDIA_ENTITY_FILE;
 
     mutex_unlock(&xmedia->mutex);
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 //===============================
@@ -762,9 +766,9 @@ RetValue_t media_entity_state(mediaHandle_t media, const char* path, mediaEntity
 /// @details This function opens a file at the specified path with the given mode.
 /// @param media Handle to the file system
 /// @param path  Path of the file to open
-/// @param mode  File open mode mask
+/// @param mode  File open mode mask of type smacFileOpenModeMask_t
 /// @return Handle to the opened file, or NULL on failure
-mediaFileHandle_t media_file_open(mediaHandle_t media, const char* path, mediaFileOpenMode_t mode)
+smacFileHandle_t smac_media_file_open(smacMediaHandle_t media, const char* path, smacFileOpenModeMask_t mode)
 {
     FX_FILE* file;
     uint32_t fx_mode          = 0;
@@ -780,7 +784,7 @@ mediaFileHandle_t media_file_open(mediaHandle_t media, const char* path, mediaFi
         fx_mode |= FX_OPEN_FOR_WRITE;
     }
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
         return NULL;
     }
@@ -812,13 +816,13 @@ mediaFileHandle_t media_file_open(mediaHandle_t media, const char* path, mediaFi
     }
 
     mutex_unlock(&xmedia->mutex);
-    return (mediaFileHandle_t)file;
+    return (smacFileHandle_t)file;
 }
 
 /// @brief Close a file
 /// @details This function closes the specified file and releases its resources.
 /// @param file Handle to the file to be closed
-void media_file_close(mediaFileHandle_t file)
+void smac_media_file_close(smacFileHandle_t file)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
 
@@ -832,17 +836,18 @@ void media_file_close(mediaFileHandle_t file)
 /// @param buffer Pointer to the buffer to receive the data
 /// @param size   Number of bytes to read
 /// @param read_size Pointer to a variable to receive the number of bytes actually read
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_file_read(mediaFileHandle_t file, void* buffer, uint32_t size, uint32_t* read_size)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_file_read(smacFileHandle_t file, void* buffer, uint32_t size,
+                              uint32_t* read_size)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
 
     if (fx_file_read(fx_file, buffer, size, read_size) != FX_SUCCESS)
     {
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Write data to a file
@@ -851,15 +856,15 @@ RetValue_t media_file_read(mediaFileHandle_t file, void* buffer, uint32_t size, 
 /// @param buffer Pointer to the buffer containing the data to write
 /// @param size   Number of bytes to write
 /// @param written_size Pointer to a variable to receive the number of bytes actually written
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_file_write(mediaFileHandle_t file, const void* buffer, uint32_t size,
-                            uint32_t* written_size)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_file_write(smacFileHandle_t file, const void* buffer, uint32_t size,
+                               uint32_t* written_size)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
 
     if (fx_file_write(fx_file, (VOID*)buffer, size) != FX_SUCCESS)
     {
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     if (written_size != NULL)
@@ -867,30 +872,30 @@ RetValue_t media_file_write(mediaFileHandle_t file, const void* buffer, uint32_t
         *written_size = size;
     }
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Seek to a position in a file
 /// @details This function sets the file position indicator for the specified file.
 /// @param file   Handle to the file
 /// @param offset Offset in bytes to seek
-/// @return RET_VALUE_OK on success, error code otherwise
+/// @return SMAC_RET_OK on success, error code otherwise
 /// @note The offset must be within the range of a 32-bit unsigned integer due to FileX limitations.
-RetValue_t media_file_seek(mediaFileHandle_t file, uint64_t offset)
+smacRetCode_t smac_media_file_seek(smacFileHandle_t file, uint64_t offset)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
 
     if (offset > UINT32_MAX)
     {
-        return RET_VALUE_PARAM_ERR;
+        return SMAC_RET_PARAM_ERR;
     }
 
     if (fx_file_seek(fx_file, offset) != FX_SUCCESS)
     {
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Seek to a position in a file from the current position
@@ -898,10 +903,10 @@ RetValue_t media_file_seek(mediaFileHandle_t file, uint64_t offset)
 ///     relative to the current position.
 /// @param file   Handle to the file
 /// @param offset Offset in bytes to seek from the current position
-/// @return RET_VALUE_OK on success, error code otherwise
+/// @return SMAC_RET_OK on success, error code otherwise
 /// @note The resulting position must be within the range of a 32-bit unsigned integer
 ///       due to FileX limitations.
-RetValue_t media_file_seek_from_current(mediaFileHandle_t file, uint64_t offset)
+smacRetCode_t smac_media_file_seek_from_current(smacFileHandle_t file, uint64_t offset)
 {
     FX_FILE* fx_file      = (FX_FILE*)file;
     uint64_t new_position = fx_file->fx_file_current_file_offset + offset;
@@ -909,21 +914,21 @@ RetValue_t media_file_seek_from_current(mediaFileHandle_t file, uint64_t offset)
     if ((fx_file->fx_file_current_file_offset >= UINT32_MAX) || (offset > UINT32_MAX) ||
         (new_position > UINT32_MAX))
     {
-        return RET_VALUE_PARAM_ERR;
+        return SMAC_RET_PARAM_ERR;
     }
 
     if (fx_file_seek(fx_file, (uint32_t)new_position) != FX_SUCCESS)
     {
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Get the current position in a file
 /// @details This function retrieves the current file position indicator for the specified file.
 /// @param file Handle to the file
 /// @return Current position in bytes from the beginning of the file
-uint32_t media_file_tell(mediaFileHandle_t file)
+uint32_t smac_media_file_tell(smacFileHandle_t file)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
     return fx_file->fx_file_current_file_offset;
@@ -933,7 +938,7 @@ uint32_t media_file_tell(mediaFileHandle_t file)
 /// @details This function retrieves the size of the specified file in bytes.
 /// @param file Handle to the file
 /// @return Size of the file in bytes
-uint32_t media_file_size(mediaFileHandle_t file)
+uint32_t smac_media_file_size(smacFileHandle_t file)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
     return fx_file->fx_file_current_file_size;
@@ -942,25 +947,25 @@ uint32_t media_file_size(mediaFileHandle_t file)
 /// @brief Truncate a file to the current position
 /// @details This function truncates the specified file to the current file position.
 /// @param file Handle to the file
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_file_truncate(mediaFileHandle_t file)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_file_truncate(smacFileHandle_t file)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
 
     if (fx_file_truncate(fx_file, fx_file->fx_file_current_file_offset) != FX_SUCCESS)
     {
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Synchronize a file
 /// @details This function synchronizes the specified file, ensuring that all pending changes
 ///     are written to the underlying storage.
 /// @param file Handle to the file
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_file_sync(mediaFileHandle_t file)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_file_sync(smacFileHandle_t file)
 {
     FX_FILE* fx_file = (FX_FILE*)file;
 
@@ -968,10 +973,10 @@ RetValue_t media_file_sync(mediaFileHandle_t file)
        underlying media instead. This ensures data is written to the device. */
     if (fx_media_flush(fx_file->fx_file_media_ptr) != FX_SUCCESS)
     {
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 //===============================
@@ -980,15 +985,15 @@ RetValue_t media_file_sync(mediaFileHandle_t file)
 
 /// @brief Open a directory
 /// @details This function opens a directory at the specified path.
-/// @param fs   Handle to the file system
+/// @param media   Handle to the file system
 /// @param path Path of the directory to open
 /// @return Handle to the opened directory, or NULL on failure
-mediaDirHandle_t media_dir_open(mediaHandle_t media, const char* path)
+smacDirectoryHandle_t smac_media_dir_open(smacMediaHandle_t media, const char* path)
 {
     filexDir_t* dir;
     filexMediaStack_t* xmedia = (filexMediaStack_t*)media;
 
-    if (mutex_lock(&xmedia->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&xmedia->mutex) != SMAC_RET_OK)
     {
         return NULL;
     }
@@ -1008,31 +1013,31 @@ mediaDirHandle_t media_dir_open(mediaHandle_t media, const char* path)
     dir->path[FX_MAX_LONG_NAME_LEN - 1] = '\0';
 
     mutex_unlock(&xmedia->mutex);
-    return (mediaDirHandle_t)dir;
+    return (smacDirectoryHandle_t)dir;
 }
 
 /// @brief Close a directory
 /// @details This function closes the specified directory and releases its resources.
-/// @param dir Handle to the directory to be closed
-void media_dir_close(mediaDirHandle_t dir)
+/// @param dir Handle to the directory to be closed (smacDirectoryHandle_t)
+void smac_media_dir_close(smacDirectoryHandle_t dir)
 {
     mem_block_free((uint8_t*)dir);
 }
 
 /// @brief Get the next item in a directory
 /// @details This function retrieves the next item in the specified directory.
-/// @param dir   Handle to the directory
-/// @param state Pointer to a mediaEntityState_t structure to receive the item information
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_dir_next_item_state(mediaDirHandle_t dir, mediaEntityState_t* state)
+/// @param dir   Handle to the directory (smacDirectoryHandle_t)
+/// @param state Pointer to a smacMediaEntityState_t structure to receive the item information
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_dir_next_item_state(smacDirectoryHandle_t dir, smacMediaEntityState_t* state)
 {
     CHAR* default_name;
     CHAR name[FX_MAX_LONG_NAME_LEN];
     filexDir_t* fx_dir = (filexDir_t*)dir;
 
-    if (mutex_lock(&fx_dir->media->mutex) != RET_VALUE_OK)
+    if (mutex_lock(&fx_dir->media->mutex) != SMAC_RET_OK)
     {
-        return RET_VALUE_OS_MUTEX_ERR;
+        return SMAC_RET_OS_MUTEX_ERR;
     }
 
     if (fx_dir->entry_index == 0)
@@ -1040,7 +1045,7 @@ RetValue_t media_dir_next_item_state(mediaDirHandle_t dir, mediaEntityState_t* s
         if (fx_directory_default_set(&fx_dir->media->media, (CHAR*)fx_dir->path) != FX_SUCCESS)
         {
             mutex_unlock(&fx_dir->media->mutex);
-            return RET_VALUE_LOW_LEVEL_FAILURE;
+            return SMAC_RET_LOW_LEVEL_FAILURE;
         }
 
         if (fx_directory_first_full_entry_find(
@@ -1050,7 +1055,7 @@ RetValue_t media_dir_next_item_state(mediaDirHandle_t dir, mediaEntityState_t* s
                 (UINT*)&state->time_stamp.minute, (UINT*)&state->time_stamp.second) != FX_SUCCESS)
         {
             mutex_unlock(&fx_dir->media->mutex);
-            return RET_VALUE_LOW_LEVEL_FAILURE;
+            return SMAC_RET_LOW_LEVEL_FAILURE;
         }
 
         state->kind = (state->attributes & FX_DIRECTORY) ? MEDIA_ENTITY_DIR : MEDIA_ENTITY_FILE;
@@ -1058,13 +1063,13 @@ RetValue_t media_dir_next_item_state(mediaDirHandle_t dir, mediaEntityState_t* s
         fx_dir->entry_index = fx_dir->media->media.fx_media_directory_next_full_entry_finds;
         mutex_unlock(&fx_dir->media->mutex);
 
-        return RET_VALUE_OK;
+        return SMAC_RET_OK;
     }
 
     if (fx_directory_default_get(&fx_dir->media->media, &default_name) != FX_SUCCESS)
     {
         mutex_unlock(&fx_dir->media->mutex);
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     if (strncmp(fx_dir->path, default_name, FX_MAX_LONG_NAME_LEN) != 0)
@@ -1072,19 +1077,20 @@ RetValue_t media_dir_next_item_state(mediaDirHandle_t dir, mediaEntityState_t* s
         if (fx_directory_default_set(&fx_dir->media->media, (CHAR*)fx_dir->path) != FX_SUCCESS)
         {
             mutex_unlock(&fx_dir->media->mutex);
-            return RET_VALUE_LOW_LEVEL_FAILURE;
+            return SMAC_RET_LOW_LEVEL_FAILURE;
         }
 
         fx_dir->media->media.fx_media_directory_next_full_entry_finds = fx_dir->entry_index;
     }
 
     if (fx_directory_next_full_entry_find(
-            &fx_dir->media->media, name, (UINT*)&state->attributes, (ULONG*)&state->size, (UINT*)&state->time_stamp.year,
-            (UINT*)&state->time_stamp.month, (UINT*)&state->time_stamp.day, (UINT*)&state->time_stamp.hour,
+            &fx_dir->media->media, name, (UINT*)&state->attributes, (ULONG*)&state->size,
+            (UINT*)&state->time_stamp.year, (UINT*)&state->time_stamp.month,
+            (UINT*)&state->time_stamp.day, (UINT*)&state->time_stamp.hour,
             (UINT*)&state->time_stamp.minute, (UINT*)&state->time_stamp.second) != FX_SUCCESS)
     {
         mutex_unlock(&fx_dir->media->mutex);
-        return RET_VALUE_LOW_LEVEL_FAILURE;
+        return SMAC_RET_LOW_LEVEL_FAILURE;
     }
 
     state->kind = (state->attributes & FX_DIRECTORY) ? MEDIA_ENTITY_DIR : MEDIA_ENTITY_FILE;
@@ -1092,20 +1098,20 @@ RetValue_t media_dir_next_item_state(mediaDirHandle_t dir, mediaEntityState_t* s
     fx_dir->entry_index = fx_dir->media->media.fx_media_directory_next_full_entry_finds;
     mutex_unlock(&fx_dir->media->mutex);
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 /// @brief Rewind a directory
 /// @details This function rewinds the specified directory to the beginning.
 /// @param dir Handle to the directory
-/// @return RET_VALUE_OK on success, error code otherwise
-RetValue_t media_dir_rewind(mediaDirHandle_t dir)
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_media_dir_rewind(smacDirectoryHandle_t dir)
 {
     filexDir_t* fx_dir = (filexDir_t*)dir;
 
     fx_dir->entry_index = 0;
 
-    return RET_VALUE_OK;
+    return SMAC_RET_OK;
 }
 
 #ifdef __cplusplus

@@ -11,7 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS ON)
 
 # Set the project name
-set(CMAKE_PROJECT_NAME sam-threadx)
+set(CMAKE_PROJECT_NAME smac-threadx)
 
 # Project settings
 project(${CMAKE_PROJECT_NAME})
@@ -20,12 +20,12 @@ project(${CMAKE_PROJECT_NAME})
 add_library(${CMAKE_PROJECT_NAME} STATIC)
 
 # Add all sub directories
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE source/sam-filex.c)
-target_sources(${CMAKE_PROJECT_NAME} PRIVATE source/sam-threadx.c)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE source/smac-filex.c)
+target_sources(${CMAKE_PROJECT_NAME} PRIVATE source/smac-threadx.c)
 
 # Add self include path
 target_include_directories(${CMAKE_PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Link the target reference libraries
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE sam)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE smac)
 
