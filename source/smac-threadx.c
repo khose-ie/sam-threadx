@@ -275,7 +275,7 @@ smacRetCode_t smac_os_initialize(void)
 {
     if (OS_STACK_SIZE < OS_STACK_REQUIRED_SIZE)
     {
-        return SMAC_RET_MEM_ALLOC_FAILURE;
+        return SMAC_RET_OS_KERNEL_ERR;
     }
 
     memset(OS_STACK, 0, OS_STACK_SIZE);
