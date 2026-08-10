@@ -19,6 +19,7 @@
 #include <tx_semaphore.h>
 #include <tx_thread.h>
 #include <tx_timer.h>
+#include <tx_initialize.h>
 
 #ifndef SMAC_TX_OS_STACK_SIZE
 #define SMAC_TX_OS_STACK_SIZE (1024 * 64)
@@ -142,6 +143,7 @@ typedef struct
 {
     TX_BYTE_POOL stack;
     uint8_t* stack_mem;
+    smacOsState_t state;
 } threadxControlBlock_t;
 
 /// @brief ThreadX memory pool control block
@@ -279,15 +281,18 @@ smacRetCode_t smac_os_initialize(void)
     }
 
     memset(OS_STACK, 0, OS_STACK_SIZE);
-
     os_instance()->os.stack_mem = (uint8_t*)os_instance() + OS_STACK_CONTROL_BLOCK_SIZE;
+
+    _tx_initialize_kernel_setup();
 
     if (tx_byte_pool_create(&os_instance()->os.stack, "os-stack", os_instance()->os.stack_mem,
                             OS_STACK_MEM_SIZE) != TX_SUCCESS)
     {
+        os_instance()->os.state = SMAC_OS_STATE_FAULT;
         return SMAC_RET_OS_MEM_POOL_ERR;
     }
 
+    os_instance()->os.state = SMAC_OS_STATE_READY;
     return SMAC_RET_OK;
 }
 
@@ -359,6 +364,30 @@ smacRetCode_t smac_os_initialize_mem_pool(void)
 #endif // OS_MEM_POOL_MEM4_SIZE != 0
 
     return SMAC_RET_OK;
+}
+
+/// @brief Start the OS kernel
+/// @details This function starts the OS kernel if it is in the initialized state.
+/// @return SMAC_RET_OK on success, error code otherwise
+smacRetCode_t smac_os_start(void)
+{
+    if (os_instance()->os.state != SMAC_OS_STATE_READY)
+    {
+        return SMAC_RET_OS_KERNEL_ERR;
+    }
+
+    os_instance()->os.state = SMAC_OS_STATE_RUNNING;
+    tx_kernel_enter();
+
+    return SMAC_RET_OK;
+}
+
+/// @brief  Get the current OS state
+/// @details This function retrieves the current state of the OS.
+/// @return Current OS state as a value of type @ref smacOsState_t
+smacOsState_t smac_os_state(void)
+{
+    return os_instance()->os.state;
 }
 
 /// @brief Get the current OS tick count
